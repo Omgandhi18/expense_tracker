@@ -121,3 +121,42 @@
     text-align: right;
     font-size: 1.1rem;
   }
+  .has-recurring {
+    background-color: rgba(255, 128, 66, 0.1);
+  }
+  
+  .recurring-indicator {
+    color: #FF8042;
+    font-weight: bold;
+    margin-left: 2px;
+  }
+  
+  .calendar-legend {
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    text-align: center;
+  }
+  
+  .legend-item {
+    display: inline-block;
+    margin: 0 0.5rem;
+  }
+  
+  .daily-totals {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #eee;
+  }
+  
+  .total-line {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.25rem 0;
+  }
+  
+  .total-line.daily-total {
+    font-size: 1.1rem;
+    padding-top: 0.5rem;
+    margin-top: 0.5rem;
+    border-top: 1px dashed #ddd;
+  }

@@ -93,3 +93,23 @@
     font-size: 1.2rem;
     color: #666;
   }
+  .no-data {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 200px;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    color: #666;
+    font-size: 16px;
+    border: 1px dashed #ccc;
+  }
+  
+  .error-message {
+    padding: 20px;
+    background-color: #fff3f3;
+    border-left: 4px solid #ff6b6b;
+    color: #333;
+    margin-bottom: 20px;
+    border-radius: 4px;
+  }

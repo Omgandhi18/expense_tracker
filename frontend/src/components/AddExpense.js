@@ -16,7 +16,7 @@ function AddExpense() {
     // Fetch categories from backend
     const fetchCategories = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/categories');
+        const response = await fetch('/api/categories');
         const data = await response.json();
         console.log('Categories fetched:', data.categories);
         setCategories(data.categories);
@@ -49,7 +49,7 @@ function AddExpense() {
     }
 
     try {
-      const response = await fetch('http://localhost:5000/api/expenses/add', {
+      const response = await fetch('/api/expenses/add', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -102,7 +102,7 @@ function AddExpense() {
         </div>
         
         <div className="form-group">
-          <label htmlFor="amount">Amount ($) *</label>
+          <label htmlFor="amount">Amount (₹) *</label>
           <input
             type="number"
             step="0.01"

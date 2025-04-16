@@ -3,8 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import AddExpense from './components/AddExpense';
 import CalendarView from './components/CalendarView';
-import RecurringExpenses from './components/RecurringExpenses';
 import './styles/App.css';
+import ExpenseManager from './components/ExpenseManager';
 
 function App() {
   return (
@@ -16,7 +16,7 @@ function App() {
             <Link to="/">Dashboard</Link>
             <Link to="/add">Add Expense</Link>
             <Link to="/calendar">Calendar</Link>
-            <Link to="/recurring">Recurring</Link>
+            <Link to="/expensemanager">Manage Expenses</Link>
           </nav>
         </header>
         
@@ -25,7 +25,8 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/add" element={<AddExpense />} />
             <Route path="/calendar" element={<CalendarView />} />
-            <Route path="/recurring" element={<RecurringExpenses />} />
+            <Route path="/expensemanager" element={<ExpenseManager/>} />
+            {/* Add more routes as needed */}
           </Routes>
         </main>
       </div>

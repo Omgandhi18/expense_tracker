@@ -7,7 +7,7 @@ import json
 import os
 
 app = Flask(__name__)
-CORS(app, origins="*", allow_headers=["Content-Type", "Authorization", "Access-Control-Allow-Credentials"], supports_credentials=True) # Enable CORS for all routes
+CORS(app, resources={r"/*": {"origins": "*"}})  # Allow all origins # Enable CORS for all routes
 
 # Database initialization
 def init_db():
@@ -26,20 +26,6 @@ def init_db():
     )
     ''')
     
-    # Create recurring expenses table
-    c.execute('''
-    CREATE TABLE IF NOT EXISTS recurring_expenses (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        description TEXT NOT NULL,
-        amount REAL NOT NULL,
-        category TEXT NOT NULL,
-        frequency TEXT NOT NULL,
-        start_date TEXT NOT NULL,
-        end_date TEXT,
-        notes TEXT,
-        last_generated TEXT
-    )
-    ''')
     
     # Default categories if needed
     c.execute('''
@@ -67,108 +53,7 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-# Generate recurring expenses
-def generate_recurring_expenses():
-    conn = get_db_connection()
-    today = datetime.now().strftime('%Y-%m-%d')
-    
-    # Get all active recurring expenses
-    recurring = conn.execute('''
-        SELECT * FROM recurring_expenses 
-        WHERE (end_date IS NULL OR end_date >= ?) 
-        AND start_date <= ?
-    ''', (today, today)).fetchall()
-    
-    for expense in recurring:
-        last_generated = expense['last_generated']
-        if not last_generated:
-            last_date = datetime.strptime(expense['start_date'], '%Y-%m-%d')
-        else:
-            last_date = datetime.strptime(last_generated, '%Y-%m-%d')
-        
-        current_date = datetime.now()
-        next_dates = []
-        
-        # Calculate the next dates to generate based on frequency
-        frequency = expense['frequency']
-        if frequency == 'daily':
-            days_diff = (current_date - last_date).days
-            for i in range(1, days_diff + 1):
-                next_dates.append(last_date + timedelta(days=i))
-        
-        elif frequency == 'weekly':
-            weeks_diff = (current_date - last_date).days // 7
-            for i in range(1, weeks_diff + 1):
-                next_dates.append(last_date + timedelta(weeks=i))
-        
-        elif frequency == 'biweekly':
-            weeks_diff = (current_date - last_date).days // 14
-            for i in range(1, weeks_diff + 1):
-                next_dates.append(last_date + timedelta(weeks=i*2))
-        
-        elif frequency == 'monthly':
-            month_diff = (current_date.year - last_date.year) * 12 + current_date.month - last_date.month
-            for i in range(1, month_diff + 1):
-                year = last_date.year + ((last_date.month - 1 + i) // 12)
-                month = (last_date.month - 1 + i) % 12 + 1
-                day = min(last_date.day, calendar.monthrange(year, month)[1])
-                next_dates.append(datetime(year, month, day))
-        
-        elif frequency == 'quarterly':
-            month_diff = (current_date.year - last_date.year) * 12 + current_date.month - last_date.month
-            quarters = month_diff // 3
-            for i in range(1, quarters + 1):
-                year = last_date.year + ((last_date.month - 1 + i*3) // 12)
-                month = (last_date.month - 1 + i*3) % 12 + 1
-                day = min(last_date.day, calendar.monthrange(year, month)[1])
-                next_dates.append(datetime(year, month, day))
-        
-        elif frequency == 'biannually':
-            month_diff = (current_date.year - last_date.year) * 12 + current_date.month - last_date.month
-            half_years = month_diff // 6
-            for i in range(1, half_years + 1):
-                year = last_date.year + ((last_date.month - 1 + i*6) // 12)
-                month = (last_date.month - 1 + i*6) % 12 + 1
-                day = min(last_date.day, calendar.monthrange(year, month)[1])
-                next_dates.append(datetime(year, month, day))
-        
-        elif frequency == 'annually':
-            years_diff = current_date.year - last_date.year
-            if current_date.month > last_date.month or (current_date.month == last_date.month and current_date.day >= last_date.day):
-                years_diff += 1
-            for i in range(1, years_diff):
-                try:
-                    next_dates.append(datetime(last_date.year + i, last_date.month, last_date.day))
-                except ValueError:  # Handle Feb 29 in leap years
-                    if last_date.month == 2 and last_date.day == 29:
-                        next_dates.append(datetime(last_date.year + i, 2, 28))
-                    else:
-                        raise
-        
-        # Insert new expenses for each calculated date
-        if next_dates:
-            for next_date in next_dates:
-                if next_date.date() <= datetime.now().date():
-                    conn.execute('''
-                        INSERT INTO expenses (description, amount, category, date, notes)
-                        VALUES (?, ?, ?, ?, ?)
-                    ''', (
-                        expense['description'], 
-                        expense['amount'], 
-                        expense['category'], 
-                        next_date.strftime('%Y-%m-%d'),
-                        f"Automated recurring expense: {expense['notes'] if expense['notes'] else ''}"
-                    ))
-            
-            # Update last_generated
-            conn.execute('''
-                UPDATE recurring_expenses 
-                SET last_generated = ? 
-                WHERE id = ?
-            ''', (current_date.strftime('%Y-%m-%d'), expense['id']))
-    
-    conn.commit()
-    conn.close()
+
 
 @app.route('/init-db')
 def initialize_database():
@@ -197,18 +82,18 @@ def test_db():
             conn.close()
 
 # Middleware to generate recurring expenses before each request
-@app.before_request
-def before_request():
-    generate_recurring_expenses()
 
 # Route to get all expenses with aggregated data for dashboard
 @app.route('/api/expenses', methods=['GET'])
 def get_expenses():
     try:
         conn = get_db_connection()
+        
+        # Fetch regular expenses
         expenses = conn.execute('SELECT * FROM expenses ORDER BY date DESC').fetchall()
         
-        # Convert to list of dicts
+        
+        # Convert regular expenses to list of dicts
         expenses_list = []
         for expense in expenses:
             expenses_list.append({
@@ -217,8 +102,10 @@ def get_expenses():
                 'amount': expense['amount'],
                 'category': expense['category'],
                 'date': expense['date'],
-                'notes': expense['notes']
+                'notes': expense['notes'],
+                'type': 'regular'  # Add type to distinguish
             })
+        
         
         # Prepare response data
         response_data = {
@@ -332,6 +219,77 @@ def add_expense():
     except Exception as e:
         return jsonify({'message': f'Error adding expense: {str(e)}'}), 500
 
+# Route to update an existing expense
+@app.route('/api/expenses/<int:id>', methods=['PUT'])
+def update_expense(id):
+    expense_data = request.json
+    
+    if not expense_data:
+        return jsonify({'message': 'No data provided'}), 400
+    
+    if 'amount' in expense_data:
+        try:
+            amount = float(expense_data['amount'])
+            if amount <= 0:
+                return jsonify({'message': 'Amount must be positive'}), 400
+        except ValueError:
+            return jsonify({'message': 'Invalid amount'}), 400
+    
+    try:
+        conn = get_db_connection()
+        
+        # Check if expense exists
+        expense = conn.execute('SELECT * FROM expenses WHERE id = ?', (id,)).fetchone()
+        if not expense:
+            conn.close()
+            return jsonify({'message': 'Expense not found'}), 404
+        
+        # Build update query dynamically based on provided fields
+        fields = []
+        values = []
+        
+        for key in ['description', 'amount', 'category', 'date', 'notes']:
+            if key in expense_data:
+                fields.append(f"{key} = ?")
+                values.append(expense_data[key])
+        
+        if not fields:
+            conn.close()
+            return jsonify({'message': 'No fields to update'}), 400
+        
+        values.append(id)  # Add ID for WHERE clause
+        
+        conn.execute(
+            f"UPDATE expenses SET {', '.join(fields)} WHERE id = ?",
+            values
+        )
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'message': 'Expense updated successfully'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Error updating expense: {str(e)}'}), 500
+
+# Route to delete an expense
+@app.route('/api/expenses/<int:id>', methods=['DELETE'])
+def delete_expense(id):
+    try:
+        conn = get_db_connection()
+        
+        # Check if expense exists
+        expense = conn.execute('SELECT * FROM expenses WHERE id = ?', (id,)).fetchone()
+        if not expense:
+            conn.close()
+            return jsonify({'message': 'Expense not found'}), 404
+        
+        conn.execute('DELETE FROM expenses WHERE id = ?', (id,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'message': 'Expense deleted successfully'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Error deleting expense: {str(e)}'}), 500
+
 # Route to get expenses for a specific month
 @app.route('/api/expenses/month/<int:year>/<int:month>', methods=['GET'])
 def get_month_expenses(year, month):
@@ -431,93 +389,7 @@ def add_category():
     except Exception as e:
         return jsonify({'message': f'Error adding category: {str(e)}'}), 500
 
-# Routes for recurring expenses
-@app.route('/api/recurring-expenses', methods=['GET'])
-def get_recurring_expenses():
-    conn = get_db_connection()
-    recurring = conn.execute('SELECT * FROM recurring_expenses ORDER BY description').fetchall()
-    
-    recurring_list = []
-    for item in recurring:
-        recurring_list.append({
-            'id': item['id'],
-            'description': item['description'],
-            'amount': item['amount'],
-            'category': item['category'],
-            'frequency': item['frequency'],
-            'startDate': item['start_date'],
-            'endDate': item['end_date'],
-            'notes': item['notes'],
-            'lastGenerated': item['last_generated']
-        })
-    
-    conn.close()
-    
-    return jsonify({'recurringExpenses': recurring_list})
-
-# Route to add a new recurring expense
-@app.route('/api/recurring-expenses/add', methods=['POST'])
-def add_recurring_expense():
-    recurring_data = request.json
-    
-    required_fields = ['description', 'amount', 'category', 'frequency', 'startDate']
-    if not recurring_data or not all(key in recurring_data for key in required_fields):
-        return jsonify({'message': 'Missing required fields'}), 400
-    
-    try:
-        amount = float(recurring_data['amount'])
-        if amount <= 0:
-            return jsonify({'message': 'Amount must be positive'}), 400
-    except ValueError:
-        return jsonify({'message': 'Invalid amount'}), 400
-    
-    valid_frequencies = ['daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'biannually', 'annually']
-    if recurring_data['frequency'] not in valid_frequencies:
-        return jsonify({'message': 'Invalid frequency'}), 400
-    
-    try:
-        conn = get_db_connection()
-        conn.execute('''
-            INSERT INTO recurring_expenses 
-            (description, amount, category, frequency, start_date, end_date, notes, last_generated)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            recurring_data['description'],
-            amount,
-            recurring_data['category'],
-            recurring_data['frequency'],
-            recurring_data['startDate'],
-            recurring_data.get('endDate', None),
-            recurring_data.get('notes', ''),
-            None  # last_generated starts as NULL
-        ))
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'message': 'Recurring expense added successfully'}), 201
-    except Exception as e:
-        return jsonify({'message': f'Error adding recurring expense: {str(e)}'}), 500
-
-# Route to delete a recurring expense
-@app.route('/api/recurring-expenses/<int:id>', methods=['DELETE'])
-def delete_recurring_expense(id):
-    try:
-        conn = get_db_connection()
-        
-        # Check if recurring expense exists
-        expense = conn.execute('SELECT id FROM recurring_expenses WHERE id = ?', (id,)).fetchone()
-        if not expense:
-            conn.close()
-            return jsonify({'message': 'Recurring expense not found'}), 404
-        
-        conn.execute('DELETE FROM recurring_expenses WHERE id = ?', (id,))
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'message': 'Recurring expense deleted successfully'}), 200
-    except Exception as e:
-        return jsonify({'message': f'Error deleting recurring expense: {str(e)}'}), 500
 
 if __name__ == '__main__':
     init_db()
-    app.run(port = 5000,debug=True)
+    app.run(port = 5050,debug=True)
